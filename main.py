@@ -147,6 +147,13 @@ client = discord.Client()
 
 already_ran = False
 
+# Set once Discord confirms the change; decides the exit code.
+succeeded = False
+
+
+class TagNotApplied(Exception):
+    """Discord accepted the request, but the profile doesn't reflect it."""
+
 
 def supports_primary_guild() -> bool:
     """
@@ -245,13 +252,29 @@ async def set_server_tag(
     return "raw"
 
 
+async def fetch_primary_guild() -> dict:
+    """
+    Read the account's primary guild back from Discord,
+    so success is only reported once the profile shows it.
+    """
+
+    route = discord.http.Route(
+        "GET",
+        "/users/@me",
+    )
+
+    data = await client.http.request(route)
+
+    return data.get("primary_guild") or {}
+
+
 # ============================================================
 # READY EVENT
 # ============================================================
 
 @client.event
 async def on_ready():
-    global already_ran
+    global already_ran, succeeded
 
     # Discord can fire on_ready again after reconnecting.
     if already_ran:
@@ -301,10 +324,35 @@ async def on_ready():
                 enabled=True,
             )
 
+            info(f"Method used: {method}")
+            info("Verifying with Discord...")
+
+            primary_guild = await fetch_primary_guild()
+
+            equipped_id = primary_guild.get("identity_guild_id")
+            tag = primary_guild.get("tag")
+
+            if (
+                str(equipped_id) != str(guild_id)
+                or primary_guild.get("identity_enabled") is not True
+            ):
+                raise TagNotApplied(
+                    "Discord accepted the request, but the tag "
+                    "isn't equipped on your profile "
+                    f"(primary guild: {equipped_id})."
+                )
+
+            if not tag:
+                raise TagNotApplied(
+                    "The guild is set as your primary guild, "
+                    "but it has no server tag to display. "
+                    "Make sure the server has a tag set up."
+                )
+
             print()
 
-            success("Server tag equipped successfully.")
-            info(f"Method used: {method}")
+            success(f"Server tag [{tag}] equipped and verified.")
+            succeeded = True
 
         # ----------------------------------------------------
         # REMOVE
@@ -319,10 +367,23 @@ async def on_ready():
                 enabled=False,
             )
 
+            info(f"Method used: {method}")
+            info("Verifying with Discord...")
+
+            primary_guild = await fetch_primary_guild()
+
+            if primary_guild.get("identity_enabled"):
+                raise TagNotApplied(
+                    "Discord accepted the request, but a server tag "
+                    "is still equipped "
+                    f"(primary guild: "
+                    f"{primary_guild.get('identity_guild_id')})."
+                )
+
             print()
 
-            success("Server tag removed successfully.")
-            info(f"Method used: {method}")
+            success("Server tag removed and verified.")
+            succeeded = True
 
     # ========================================================
     # ERRORS
@@ -361,6 +422,10 @@ async def on_ready():
 
         error(str(exc))
 
+    except TagNotApplied as exc:
+
+        error(str(exc))
+
     except ValueError as exc:
 
         error(str(exc))
@@ -393,6 +458,17 @@ if __name__ == "__main__":
 
         sys.exit(1)
 
+    if (
+        args.command == "equip"
+        and args.guild_id == 123456789012345678
+    ):
+        error(
+            "Set DEFAULT_GUILD_ID to your server's ID, "
+            "or pass it: python main.py equip <guild_id>"
+        )
+
+        sys.exit(1)
+
     try:
         client.run(TOKEN)
 
@@ -405,3 +481,5 @@ if __name__ == "__main__":
             f"Startup failed: "
             f"{type(exc).__name__}: {exc}"
         )
+
+    sys.exit(0 if succeeded else 1)
