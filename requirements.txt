@@ -1,0 +1,4 @@
+# Must be discord.py-self, NOT the official discord.py: the official library
+# rejects user tokens and requires intents for discord.Client().
+discord.py-self>=2.1.0
+colorama>=0.4.6

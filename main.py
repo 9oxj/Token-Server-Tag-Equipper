@@ -13,10 +13,10 @@ from colorama import init
 TOKEN = "YOUR_USER_TOKEN"
 
 # Used when you run:
-#   python tag.py equip
+#   python main.py equip
 #
 # You can override it with:
-#   python tag.py equip 123456789012345678
+#   python main.py equip 123456789012345678
 DEFAULT_GUILD_ID = 123456789012345678
 
 
